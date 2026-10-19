@@ -314,6 +314,39 @@ def test_profile_auth_add_owns_only_its_own_rows(fleet):
     assert [e["id"] for e in fleet["rows"](fleet["root"])] == ["abc123"]
 
 
+def test_profile_anthropic_auth_add_with_root_singleton_persists_only_profile_grant(fleet):
+    """A first profile login survives without copying root's single-use grant."""
+    from agent.credential_pool import AUTH_TYPE_OAUTH, PooledCredential, load_pool
+
+    root = fleet["root"]
+    root_store = json.loads((root / "auth.json").read_text())
+    root_store["credential_pool"].pop("anthropic", None)
+    (root / "auth.json").write_text(json.dumps(root_store))
+    singleton = root / ".anthropic_oauth.json"
+    singleton.write_text(json.dumps({
+        "accessToken": "at-root", "refreshToken": "rt-root",
+        "expiresAt": int((time.time() + 3600) * 1000),
+    }))
+    sentinel = _profile(fleet, "sentinel")
+    root_before = (root / "auth.json").read_bytes()
+    singleton_before = singleton.read_bytes()
+
+    fleet["use"](sentinel)
+    load_pool("anthropic").add_entry(PooledCredential(
+        provider="anthropic", id="sent01", label="sentinel", auth_type=AUTH_TYPE_OAUTH,
+        priority=0, source="manual:hermes_pkce", access_token="at-sentinel",
+        refresh_token="rt-sentinel",
+    ))
+
+    rows = fleet["rows"](sentinel)
+    assert rows is not None and [row["id"] for row in rows] == ["sent01"]
+    assert "rt-root" not in (sentinel / "auth.json").read_text()
+    assert (root / "auth.json").read_bytes() == root_before
+    assert singleton.read_bytes() == singleton_before
+    fleet["use"](sentinel)
+    assert "sent01" in [entry.id for entry in load_pool("anthropic").entries()]
+
+
 def test_classic_mode_persist_is_unchanged(fleet):
     from agent.credential_pool import load_pool
 

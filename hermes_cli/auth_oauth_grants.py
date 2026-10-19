@@ -449,8 +449,9 @@ class _HealPass:
                 self.lineage_proven = True
                 self._adopt_root_row(match_idx, row)
             # No root pool counterpart. Root's grant may live only in its .anthropic_oauth.json
-            # (the ``hermes auth`` PKCE shape); a profile hermes_pkce-family row is its copy.
-            elif _is_pkce_row(row) and self.root_singleton_row is not None and not self.r_oauth:
+            # (the ``hermes auth`` PKCE shape); only a seeded ``hermes_pkce`` row is its copy.
+            # ``manual:hermes_pkce`` is an independent ``auth add`` login owned by the profile.
+            elif row.get("source") == "hermes_pkce" and self.root_singleton_row is not None and not self.r_oauth:
                 self._adopt_root_singleton(row)
             else:
                 # Root holds no copy of this lineage (independent account, or root never had the
